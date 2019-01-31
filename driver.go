@@ -592,3 +592,53 @@ func (d *CCEDriver) setNodeCount(ctx context.Context, clusterInfo *types.Cluster
 	logrus.Info("set cluster node count success")
 	return nil
 }
+
+func (d *CCEDriver) RemoveLegacyServiceAccount(ctx context.Context, clusterInfo *types.ClusterInfo) error {
+	clientSet, err := getClientSet(ctx, clusterInfo)
+	if err != nil {
+		return err
+	}
+
+	return util.DeleteLegacyServiceAccountAndRoleBinding(clientSet)
+}
+
+func (d *CCEDriver) ETCDSave(ctx context.Context, clusterInfo *types.ClusterInfo, opts *types.DriverOptions, snapshotName string) error {
+	return fmt.Errorf("ETCD backup operations are not implemented")
+}
+
+func (d *CCEDriver) ETCDRestore(ctx context.Context, clusterInfo *types.ClusterInfo, opts *types.DriverOptions, snapshotName string) error {
+	return fmt.Errorf("ETCD backup operations are not implemented")
+}
+
+func getClientSet(ctx context.Context, clusterInfo *types.ClusterInfo) (*kubernetes.Clientset, error) {
+	capem, err := base64.StdEncoding.DecodeString(clusterInfo.RootCaCertificate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode CA: %v", err)
+	}
+
+	key, err := base64.StdEncoding.DecodeString(clusterInfo.ClientKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode client key: %v", err)
+	}
+
+	certdata, err := base64.StdEncoding.DecodeString(clusterInfo.ClientCertificate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode client cert: %v", err)
+	}
+
+	host := clusterInfo.Endpoint
+	if !strings.HasPrefix(host, "https://") {
+		host = fmt.Sprintf("https://%s", host)
+	}
+
+	config := &rest.Config{
+		Host: host,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:   capem,
+			KeyData:  key,
+			CertData: certdata,
+		},
+	}
+
+	return kubernetes.NewForConfig(config)
+}
