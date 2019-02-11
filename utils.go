@@ -638,7 +638,7 @@ func getNodeRequirement(state state, count int64) *common.NodeInfo {
 	if len(state.NodeConfig.PublicIP.Ids) > 0 {
 		nodeconf.Spec.PublicIP.Ids = state.NodeConfig.PublicIP.Ids
 	}
-	if nodeconf.Spec.PublicIP.Count > 0 {
+	if state.NodeConfig.PublicIP.Count > 0 {
 		nodeconf.Spec.PublicIP.Count = state.NodeConfig.PublicIP.Count
 		nodeconf.Spec.PublicIP.Eip = &common.Eip{
 			Iptype: state.NodeConfig.PublicIP.Eip.Iptype,
