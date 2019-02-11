@@ -267,40 +267,7 @@ func (d *CCEDriver) PostCheck(ctx context.Context, clusterInfo *types.ClusterInf
 	clusterInfo.ClientCertificate = cert.Users[0].User.ClientCertificateData
 	clusterInfo.Username = cert.Users[0].Name
 
-	capem, err := base64.StdEncoding.DecodeString(clusterInfo.RootCaCertificate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode CA: %v", err)
-	}
-
-	key, err := base64.StdEncoding.DecodeString(clusterInfo.ClientKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode client key: %v", err)
-	}
-
-	certdata, err := base64.StdEncoding.DecodeString(clusterInfo.ClientCertificate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode client cert: %v", err)
-	}
-
-	host := clusterInfo.Endpoint
-	if !strings.HasPrefix(host, "https://") {
-		host = fmt.Sprintf("https://%s", host)
-	}
-
-	config := &rest.Config{
-		Host: host,
-		TLSClientConfig: rest.TLSClientConfig{
-			CAData:   capem,
-			KeyData:  key,
-			CertData: certdata,
-		},
-	}
-	if state.ExternalServerEnabled {
-		config.TLSClientConfig.Insecure = true
-		config.TLSClientConfig.CAData = []byte{}
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := getClientSet(ctx, clusterInfo)
 	if err != nil {
 		return nil, fmt.Errorf("error creating clientset: %v", err)
 	}
