@@ -84,7 +84,7 @@ func (d *CCEDriver) GetDriverUpdateOptions(ctx context.Context) (*types.DriverFl
 }
 
 // Create creates the cluster. clusterInfo is only set when we are retrying a failed or interrupted create
-func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, clusterInfo *types.ClusterInfo) (info *types.ClusterInfo, rtnerr error) {
+func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, _ *types.ClusterInfo) (info *types.ClusterInfo, rtnerr error) {
 	logrus.Info("creating new cluster")
 	state, err := getStateFromOptions(opts)
 	if err != nil {
@@ -95,7 +95,9 @@ func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, clust
 	networkClient := network.NewClient(baseClient)
 	elbClient := elb.NewClient(baseClient)
 	cleanUpResources := []string{}
-	clusterinfo := types.ClusterInfo{}
+	info = &types.ClusterInfo{}
+	defer storeState(info, state)
+
 	var eipInfo *common.EipInfo
 	var elbInfo *common.LoadBalancerInfo
 	var listenerInfo *common.ELBListenerInfo
@@ -109,37 +111,37 @@ func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, clust
 	if state.VpcID == "" {
 		cleanUpResources = append(cleanUpResources, "vpc")
 		if _, err := createVPC(ctx, networkClient, &state); err != nil {
-			return nil, err
+			return info, err
 		}
 	}
 	if state.SubnetID == "" {
 		cleanUpResources = append(cleanUpResources, "subnet")
 		if _, err := createSubnet(ctx, networkClient, &state); err != nil {
-			return nil, err
+			return info, err
 		}
 	}
 
 	if state.ExternalServerEnabled {
 		if state.ClusterEIPID != "" {
 			if eipInfo, err = networkClient.GetEIP(ctx, state.ClusterEIPID); err != nil {
-				return nil, err
+				return info, err
 			}
 		}
 		if state.APIServerELBID == "" {
 			cleanUpResources = append(cleanUpResources, "elb")
 			if elbInfo, err = createELB(ctx, elbClient, eipInfo, &state); err != nil {
-				return nil, err
+				return info, err
 			}
 
 		} else {
 			elbInfo, err = elbClient.GetLoadBalancer(ctx, state.APIServerELBID)
 			if err != nil {
-				return nil, err
+				return info, err
 			}
 		}
 		listeners, err := elbClient.GetListeners(ctx)
 		if err != nil {
-			return nil, err
+			return info, err
 		}
 		for _, listener := range *listeners {
 			if listener.LoadbalancerID == elbInfo.ID && listener.Port == 5443 {
@@ -149,7 +151,7 @@ func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, clust
 		}
 		if listenerInfo == nil {
 			if listenerInfo, err = createListener(ctx, elbClient, &state); err != nil {
-				return nil, err
+				return info, err
 			}
 		}
 	}
@@ -157,28 +159,27 @@ func (d *CCEDriver) Create(ctx context.Context, opts *types.DriverOptions, clust
 	var cceClusterInfo *common.ClusterInfo
 	cleanUpResources = append(cleanUpResources, "cluster")
 	if cceClusterInfo, err = createCluster(ctx, cceClient, &state); err != nil {
-		return nil, err
+		return info, err
 	}
 
 	if err := createNodes(ctx, cceClient, &state); err != nil {
-		return nil, err
+		return info, err
 	}
 
 	if state.ExternalServerEnabled {
 		addresses, err := createProxyDaemonSets(ctx, cceClient, cceClusterInfo, &state)
 		if err != nil {
-			return nil, err
+			return info, err
 		}
 
 		if _, err := addBackends(ctx, listenerInfo.ID, elbClient, addresses); err != nil {
-			return nil, err
+			return info, err
 		}
 
-		clusterinfo.Endpoint = fmt.Sprintf("https://%s:5443", elbInfo.VIPAddress)
+		info.Endpoint = fmt.Sprintf("https://%s:5443", elbInfo.VIPAddress)
 	}
 
-	storeState(&clusterinfo, state)
-	return &clusterinfo, nil
+	return info, nil
 }
 
 // Update updates the cluster
