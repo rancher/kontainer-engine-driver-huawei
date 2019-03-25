@@ -593,6 +593,7 @@ func getNodeRequirement(state state, count int64) *common.NodeInfo {
 		Kind:       "Node",
 		APIVersion: "v3",
 		MetaData: common.NodeMetaInfo{
+			Name:   state.DisplayName,
 			Labels: state.NodeConfig.NodeLabels,
 		},
 		Spec: common.NodeSpecInfo{
